@@ -1,0 +1,8 @@
+<%- include('templates/header') %>
+    <h1>Welcome, <%= username %>!</h1>
+    <p>You have successfully logged in.</p>
+
+    <form action="/logout" method="GET">
+        <button type="submit">Log Out</button>
+    </form>
+<%- include('templates/footer') %>
