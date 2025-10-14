@@ -1,7 +1,9 @@
 <%- include('templates/header') %>
-    <h1>Welcome, <%= username %>!</h1>
-    <p>You have successfully logged in.</p>
+    <h1>Welcome, <%= email %>!</h1>
+    <p>You have successfully logged in!</p>
 
+    <a href="/createThread" class="btn">Create Thread</a>
+    <br>
     <form action="/logout" method="GET">
         <button type="submit">Log Out</button>
     </form>
