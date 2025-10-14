@@ -8,6 +8,7 @@ saltRounds = 12;
 const database = require('./databaseConnection');
 const db_utils = require('./database/db_utils');
 const db_user = require('./database/users');
+const { uploadImage } = require('./lib/upload');
 const success = db_utils.printMySQLVersion();
 
 const port = process.env.PORT || 3000;
