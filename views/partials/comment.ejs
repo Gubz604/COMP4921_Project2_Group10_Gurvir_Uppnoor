@@ -1,0 +1,27 @@
+<% /* views/partials/comment.ejs */ %>
+<li class="list-group-item">
+  <div class="d-flex">
+    <img src="<%= comment.profile_image || 'https://via.placeholder.com/32' %>" alt="" class="rounded me-2" width="32" height="32">
+    <div class="flex-grow-1">
+      <div class="d-flex align-items-center gap-2">
+        <strong><%= comment.author_name %></strong>
+        <small class="text-muted"><%= new Date(comment.created_at).toLocaleString() %></small>
+      </div>
+      <p class="mb-2"><%= comment.body %></p>
+
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary">Upvote</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary">Downvote</button>
+        <button type="button" class="btn btn-sm btn-link p-0" data-action="reply" data-id="<%= comment.comment_id %>">Reply</button>
+      </div>
+
+      <% if (comment.children && comment.children.length) { %>
+        <ul class="list-group list-group-flush ms-4 mt-3">
+          <% comment.children.forEach(child => { %>
+            <%- include('partials/comment', { comment: child }) %>
+          <% }) %>
+        </ul>
+      <% } %>
+    </div>
+  </div>
+</li>

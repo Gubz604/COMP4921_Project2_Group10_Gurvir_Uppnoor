@@ -1,76 +1,63 @@
+// database/users.js
 const database = require('../databaseConnection');
 
 async function createUser(postData) {
-    let createUserSQL = `
-        INSERT INTO users
-        (email, password_hash, display_name)
-        VALUES
-        (:email, :passwordHash, :displayName);
-        `;
-
-    let params = {
+    const sql = `
+    INSERT INTO users (email, password_hash, display_name)
+    VALUES (:email, :passwordHash, :displayName);
+  `;
+    const params = {
         email: postData.email,
         passwordHash: postData.hashedPassword,
         displayName: postData.displayName
-    }
-
+    };
     try {
-        const results = await database.query(createUserSQL, params);
-
-        console.log("Successfully created user");
-        console.log(results[0]);
+        await database.query(sql, params);
         return true;
     } catch (err) {
-        console.log("Error inserting user");
-        console.log(err);
+        console.log("Error inserting user", err);
         return false;
     }
 }
 
 async function getUser(postData) {
-    let getUserSQL = `
-        SELECT email, password_hash
-        FROM users
-        WHERE email = :email;
-        `;
-
-    let params = {
-        email: postData.email
-    }
-
+    const sql = `
+    SELECT user_id, email, password_hash, display_name
+    FROM users
+    WHERE email = :email;
+  `;
+    const params = { email: postData.email };
     try {
-        const results = await database.query(getUserSQL, params);
-
-        console.log("Successfully queried the database for user");
-        return results[0];
+        const results = await database.query(sql, params);
+        return results[0]; // array of rows
     } catch (err) {
-        console.log("Error trying to find user");
-        console.log(err);
+        console.log("Error trying to find user", err);
         return false;
     }
 }
 
 async function getUserId(postData) {
-    let getUserId = `
-        SELECT user_id
-        FROM users
-        WHERE email = :email;
-        `;
-
-    let params = {
-        email: postData.email
-    }
-
+    const sql = `SELECT user_id FROM users WHERE email = :email;`;
+    const params = { email: postData.email };
     try {
-        const result = await database.query(getUserId, params);
-
-        console.log("Successfully queried the database for user id");
+        const result = await database.query(sql, params);
         return result[0];
     } catch (err) {
-        console.log("Error trying to find user");
-        console.log(err);
+        console.log("Error trying to find user id", err);
         return false;
     }
 }
 
-module.exports = { createUser, getUser, getUserId };
+async function getDisplayName(postData) {
+    const sql = `SELECT display_name FROM users WHERE email = :email;`;
+    const params = { email: postData.email };
+    try {
+        const result = await database.query(sql, params);
+        return result[0]?.[0]?.display_name || null; 
+    } catch (err) {
+        console.log("Error trying to find display name", err);
+        return null;
+    }
+}
+
+module.exports = { createUser, getUser, getUserId, getDisplayName };

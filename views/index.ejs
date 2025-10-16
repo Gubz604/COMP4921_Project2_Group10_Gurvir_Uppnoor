@@ -1,10 +1,15 @@
 <%- include('templates/header') %>
-<main>
-    <form action="/signupForm" method="POST">
-        <button type="submit" name="action" value="signup">Sign Up</button>
-    </form>
-    <form action="/loginForm" method="POST">
-        <button type="submit" name="action" value="login">Log In</button>
-    </form>
-</main>
-<%- include('templates/footer') %>
+
+    <main class="container py-4 text-center">
+        <div class="position-relative d-inline-block">
+            <img src="/image.jpg" alt="collage" class="img-fluid rounded shadow">
+
+            <!-- Overlay button -->
+            <a href="/home"
+                class="btn btn-lg btn-primary position-absolute top-50 start-50 translate-middle px-5 py-3 shadow">
+                HOME
+            </a>
+        </div>
+    </main>
+
+    <%- include('templates/footer') %>

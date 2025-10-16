@@ -1,10 +1,47 @@
 <%- include('templates/header') %>
-    <h1>Welcome, <%= email %>!</h1>
-    <p>You have successfully logged in!</p>
 
-    <a href="/createThread" class="btn">Create Thread</a>
-    <br>
-    <form action="/logout" method="GET">
-        <button type="submit">Log Out</button>
-    </form>
-<%- include('templates/footer') %>
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="h4 mb-0">Welcome, <%= displayName %>
+    </h1>
+    <a href="/createThread" class="btn btn-primary">Create Thread</a>
+  </div>
+
+  <h2 class="h5 mb-3">Most Recent Threads</h2>
+
+  <% if (!recentThreads || recentThreads.length===0) { %>
+    <div class="alert alert-secondary">No threads yet. Be the first to post.</div>
+    <% } else { %>
+      <div class="row g-4">
+        <% recentThreads.forEach(t=> { %>
+          <div class="col-12 col-lg-4">
+            <div class="card shadow-sm h-100">
+              <div class="card-body d-flex flex-column">
+                <h3 class="h5 card-title">
+                  <%= t.title %>
+                </h3>
+                <p class="text-muted mb-2">
+                  by <strong>
+                    <%= t.owner_name %>
+                  </strong> ·
+                  <%= new Date(t.created_at).toLocaleString() %>
+                </p>
+                <p class="card-text flex-grow-1 thread-snippet">
+                  <% const raw=(t.body || '' ); const normalized=raw .replace(/\r\n/g, '\n' ) // normalize newlines
+                    .replace(/^[\t ]+/gm, '' ) // remove leading spaces on each line .trim(); const
+                    short=normalized.length> 200 ? normalized.slice(0, 200) + '…' : normalized;
+                    %>
+                    <%= short %>
+                </p>
+
+                <div class="d-flex justify-content-between align-items-center">
+                  <!-- <small class="text-muted">💬 <%= t.comments_count || 0 %> · ⬆️ <%= t.likes_count || 0 %></small> -->
+                  <a href="/thread?threadId=<%= t.thread_id %>" class="btn btn-outline-primary btn-sm">Open</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <% }) %>
+      </div>
+      <% } %>
+
+        <%- include('templates/footer') %>

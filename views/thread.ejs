@@ -1,3 +1,75 @@
 <%- include('templates/header') %>
-success so far...
-<%- include('templates/footer') %>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h2 class="mb-0">
+                            <%= thread.title %>
+                        </h2>
+                        <div class="d-flex gap-2">
+                            <a href="/home" class="btn btn-secondary">Home</a>
+                            <a href="/createThread" class="btn btn-outline-primary">New Thread</a>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center text-muted mb-3 gap-3">
+                        <span>by <strong>
+                                <%= thread.owner_name %>
+                            </strong></span>
+                        <span>
+                            <%= new Date(thread.created_at).toLocaleString() %>
+                        </span>
+                    </div>
+
+                    <div class="mb-4">
+                        <p class="thread-body">
+                            <%= thread.body.trim() %>
+                        </p>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-4">
+                        <button type="button" id="showCommentBox" class="btn btn-primary">Comment</button>
+                    </div>
+
+                    <!-- Top-level comment box (can be hidden initially) -->
+                    <div id="commentBox" class="card card-body mb-4" style="display:none;">
+                        <form action="#" method="POST">
+                            <div class="mb-3">
+                                <label for="commentBody" class="form-label">Add a comment</label>
+                                <textarea id="commentBody" name="body" class="form-control" rows="4"
+                                    placeholder="What are your thoughts?"></textarea>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-primary">Post</button>
+                                <button type="button" id="cancelComment" class="btn btn-light">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <hr>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const btn = document.getElementById('showCommentBox');
+            const box = document.getElementById('commentBox');
+            const cancel = document.getElementById('cancelComment');
+            if (btn) btn.addEventListener('click', () => box.style.display = 'block');
+            if (cancel) cancel.addEventListener('click', () => box.style.display = 'none');
+
+            document.addEventListener('click', (e) => {
+                if (e.target?.dataset?.action === 'reply') {
+                    const id = e.target.dataset.id;
+                    // Placeholder: no-op for now
+                    alert('Reply to comment ' + id + ' (not implemented yet)');
+                }
+            });
+        })();
+    </script>
+
+    <%- include('templates/footer') %>

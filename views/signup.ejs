@@ -1,16 +1,59 @@
 <%- include('templates/header') %>
 
-    <h1>Sign Up</h1>
-    <form action="/signup" method="POST">
-        <label for="email">Email:</label>
-        <input type="text" id="email" name="email" required>
-        <br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required>
-        <br>
-        <label for="displayname">Display Name:</label>
-        <input type="displayname" id="displayname" name="displayname" required>
-        <br>
-        <button type="submit">Sign Up</button>
-    </form>
-<%- include('templates/footer') %>
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card shadow-sm p-4">
+        <h2 class="text-center mb-3">Sign Up</h2>
+
+        <% if (typeof error==='string' && error.length) { %>
+          <div class="alert alert-danger">
+            <%= error %>
+          </div>
+          <% } %>
+
+            <form action="/signup" method="POST" novalidate>
+              <div class="mb-3">
+                <label for="email" class="form-label">Email address</label>
+                <input type="email" class="form-control <%= fieldErrors?.email ? 'is-invalid' : '' %>" id="email"
+                  name="email" value="<%= fields?.email || '' %>" placeholder="Enter your email" required>
+                <% if (fieldErrors?.email) { %>
+                  <div class="invalid-feedback">
+                    <%= fieldErrors.email %>
+                  </div>
+                  <% } %>
+              </div>
+
+              <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control <%= fieldErrors?.password ? 'is-invalid' : '' %>"
+                  id="password" name="password" placeholder="At least 8 characters" required>
+                <% if (fieldErrors?.password) { %>
+                  <div class="invalid-feedback">
+                    <%= fieldErrors.password %>
+                  </div>
+                  <% } %>
+              </div>
+
+              <div class="mb-3">
+                <label for="displayname" class="form-label">Display Name</label>
+                <input type="text" class="form-control <%= fieldErrors?.displayname ? 'is-invalid' : '' %>"
+                  id="displayname" name="displayname" value="<%= fields?.displayname || '' %>"
+                  placeholder="Choose a display name" required>
+                <% if (fieldErrors?.displayname) { %>
+                  <div class="invalid-feedback">
+                    <%= fieldErrors.displayname %>
+                  </div>
+                  <% } %>
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100">Sign Up</button>
+            </form>
+
+            <p class="text-center mt-3 mb-0">
+              Already have an account? <a href="/loginForm">Log in</a>
+            </p>
+      </div>
+    </div>
+  </div>
+
+  <%- include('templates/footer') %>
