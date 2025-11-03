@@ -1,25 +1,25 @@
-// database/threads.js
-const database = require('../databaseConnection');
+const db = require('../databaseConnection');
 
+// THREADS
 async function createThread({ userId, title, description }) {
   const sql = `
     INSERT INTO threads (owner_id, title, body)
-    VALUES (:uid, :title, :body)
+    VALUES (?, ?, ?)
   `;
-  const params = { uid: userId, title, body: description };
-  await database.query(sql, params);
-  return true;
+  const [result] = await db.query(sql, [userId, title, description]);
+  return result.insertId; // thread_id
 }
 
 async function getThreadId({ userId, title }) {
   const sql = `
-    SELECT thread_id FROM threads
-    WHERE owner_id = :uid AND title = :title
-    ORDER BY thread_id DESC LIMIT 1
+    SELECT thread_id
+    FROM threads
+    WHERE owner_id = ? AND title = ?
+    ORDER BY thread_id DESC
+    LIMIT 1
   `;
-  const params = { uid: userId, title };
-  const r = await database.query(sql, params);
-  return r[0];
+  const [rows] = await db.query(sql, [userId, title]);
+  return rows || [];
 }
 
 async function getThreadWithOwner({ threadId }) {
@@ -29,10 +29,10 @@ async function getThreadWithOwner({ threadId }) {
            u.user_id AS owner_id, u.display_name AS owner_name, u.profile_image
     FROM threads t
     JOIN users u ON u.user_id = t.owner_id
-    WHERE t.thread_id = :tid
+    WHERE t.thread_id = ?
   `;
-  const r = await database.query(sql, { tid: threadId });
-  return r[0]?.[0] || null;
+  const [rows] = await db.query(sql, [threadId]);
+  return rows?.[0] || null;
 }
 
 async function listRecentThreads(limit = 3) {
@@ -46,13 +46,39 @@ async function listRecentThreads(limit = 3) {
     ORDER BY t.created_at DESC
     LIMIT ${n}
   `;
-  const r = await database.query(sql, {});
-  return r[0] || [];
+  const [rows] = await db.query(sql);
+  return rows || [];
+}
+
+// COMMENTS
+async function addComment({ threadId, authorId, body, parentCommentId = null }) {
+  const sql = `
+    INSERT INTO comments (thread_id, author_id, parent_comment_id, body)
+    VALUES (?, ?, ?, ?)
+  `;
+  await db.query(sql, [threadId, authorId, parentCommentId, body]);
+  await db.query(`UPDATE threads SET comments_count = comments_count + 1 WHERE thread_id = ?`, [threadId]);
+}
+
+async function listCommentsForThread({ threadId }) {
+  const sql = `
+    SELECT c.comment_id, c.thread_id, c.author_id, c.parent_comment_id, c.body,
+           c.likes_count, c.created_at,
+           u.display_name AS author_name, u.profile_image
+    FROM comments c
+    JOIN users u ON u.user_id = c.author_id
+    WHERE c.thread_id = ?
+    ORDER BY c.created_at ASC
+  `;
+  const [rows] = await db.query(sql, [threadId]);
+  return rows || [];
 }
 
 module.exports = {
   createThread,
   getThreadId,
   getThreadWithOwner,
-  listRecentThreads
+  listRecentThreads,
+  addComment,
+  listCommentsForThread
 };

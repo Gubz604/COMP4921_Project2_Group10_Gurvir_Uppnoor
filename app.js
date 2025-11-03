@@ -9,6 +9,7 @@ const saltRounds = 12;
 const db_utils = require('./database/db_utils');
 const db_user = require('./database/users');
 const db_thread = require('./database/threads');
+const db_comment = require('./database/comments');
 const { requireAuth } = require('./lib/auth');
 
 db_utils.printMySQLVersion();
@@ -24,7 +25,7 @@ const node_session_secret = process.env.NODE_SESSION_SECRET;
 /* ----------------------- END OF SECRET INFORMATION ----------------------*/
 
 app.set('view engine', 'ejs');
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: true }));
 
 const mongoStore = MongoStore.create({
     mongoUrl: `mongodb+srv://gubzywubzy:${mongodb_password}@gurvircluster.vjdfpla.mongodb.net/?retryWrites=true&w=majority&appName=GurvirCluster`,
@@ -175,42 +176,91 @@ app.get('/createThread', requireAuth(), (req, res) => {
     res.render('createThread', { title: 'Create Thread' });
 });
 
+// Create a thread
 app.post('/submitThread', requireAuth(), async (req, res) => {
-    const { title, description } = req.body;
-    const email = req.session.email;
+    try {
+        const { title, description } = req.body;
 
-    if (!nonEmpty(title) || !nonEmpty(description)) {
-        return res.status(400).render('errorMessage', { error: 'Title and description are required' });
+        if (!title?.trim() || !description?.trim()) {
+            return res.status(400).render('errorMessage', { error: 'Title and description are required.' });
+        }
+
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id || null;
+
+        const threadId = await db_thread.createThread({
+            userId,
+            title: title.trim(),
+            description: description.trim(),
+        });
+
+        return res.redirect(`/thread?threadId=${threadId}`);
+    } catch (err) {
+        console.error('POST /submitThread error:', err);
+        return res.status(500).render('errorMessage', { error: 'Failed to create thread' });
     }
-
-    const user_id = await db_user.getUserId({ email });
-    if (!user_id || user_id.length !== 1) {
-        return res.status(500).render('errorMessage', { error: 'Could not find user' });
-    }
-
-    const id = user_id[0].user_id;
-    await db_thread.createThread({ userId: id, title, description });
-
-    const thread_id = await db_thread.getThreadId({ userId: id, title });
-    if (!thread_id || thread_id.length !== 1) {
-        return res.status(500).render('errorMessage', { error: 'Could not retrieve thread id' });
-    }
-
-    res.redirect('/thread?threadId=' + thread_id[0].thread_id);
 });
 
-// server.js
 app.get('/thread', requireAuth(), async (req, res) => {
-    const threadId = Number(req.query.threadId || 0);
-    if (!threadId) return res.status(400).render('errorMessage', { error: 'Missing threadId' });
+    try {
+        const threadId = Number(req.query.threadId || 0);
+        if (!threadId) {
+            return res.status(400).render('errorMessage', { error: 'Missing threadId' });
+        }
 
-    const thread = await db_thread.getThreadWithOwner({ threadId });
-    if (!thread) return res.status(404).render('404', { title: 'Not Found' });
+        const thread = await db_thread.getThreadWithOwner({ threadId });
+        if (!thread) {
+            return res.status(404).render('404', { title: 'Not Found' });
+        }
 
-    res.render('thread', {
-        title: thread.title,
-        thread,
-    });
+        // keep your existing query:
+        const flat = await db_thread.listCommentsForThread({ threadId });
+        console.log('flat comments:', flat.length);
+        // build a nested structure for the view:
+        const comments = buildCommentTreeFromFlat(flat);
+
+        console.log('roots:', comments.length, comments.map(c => c.comment_id));
+
+        return res.render('thread', { title: thread.title, thread, comments });
+    } catch (err) {
+        console.error('GET /thread error:', err);
+        return res.status(500).render('errorMessage', { error: 'Could not load thread' });
+    }
+});
+
+
+app.post('/thread/:threadId/comment', requireAuth(), async (req, res) => {
+    try {
+        const threadId = Number(req.params.threadId || 0);
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id || null;
+        const { body, parent_comment_id } = req.body;
+
+        if (!threadId) return res.status(400).render('errorMessage', { error: 'Missing threadId' });
+        if (!userId) return res.status(401).render('errorMessage', { error: 'Not signed in' });
+        if (!body?.trim()) return res.redirect(`/thread?threadId=${threadId}`);
+
+        // sanitize/normalize parent id (empty string -> null)
+        const parentId = parent_comment_id ? Number(parent_comment_id) : null;
+
+        // OPTIONAL but wise: ensure the parent exists in this thread (prevents cross-thread replies)
+        if (parentId) {
+            const ok = await db_comment.parentExistsInThread({ threadId, parentCommentId: parentId });
+            if (!ok) return res.status(400).render('errorMessage', { error: 'Invalid parent comment' });
+        }
+
+        await db_comment.addComment({
+            threadId,
+            authorId: userId,
+            body: body.trim(),
+            parentCommentId: parentId
+        });
+
+        return res.redirect(`/thread?threadId=${threadId}`);
+    } catch (err) {
+        console.error('POST /thread/:threadId/comment error:', err);
+        return res.status(500).render('errorMessage', { error: 'Failed to save comment' });
+    }
 });
 
 app.get('/home', requireAuth(), async (req, res) => {
@@ -236,3 +286,33 @@ app.use((req, res) => res.status(404).render('404', { title: 'Not Found' }));
 app.listen(port, () => {
     console.log(`http://localhost:${port}`);
 });
+
+
+// helper placed near the route (or in a util file)
+function buildCommentTreeFromFlat(rows) {
+    // rows expected to have: comment_id, parent_comment_id, body, created_at, author_name, etc.
+    const byId = new Map();
+    rows.forEach(r => {
+        byId.set(r.comment_id, {
+            // keep your existing field names so the EJS can use them directly
+            comment_id: r.comment_id,
+            parent_comment_id: r.parent_comment_id,
+            body: r.body,
+            created_at: r.created_at,
+            author_name: r.author_name,
+            // any other fields you already select…
+            children: []
+        });
+    });
+
+    const roots = [];
+    byId.forEach(node => {
+        if (node.parent_comment_id && byId.has(node.parent_comment_id)) {
+            byId.get(node.parent_comment_id).children.push(node);
+        } else {
+            roots.push(node);
+        }
+    });
+
+    return roots;
+}

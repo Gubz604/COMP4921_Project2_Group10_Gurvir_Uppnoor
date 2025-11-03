@@ -33,22 +33,33 @@
                         <button type="button" id="showCommentBox" class="btn btn-primary">Comment</button>
                     </div>
 
-                    <!-- Top-level comment box (can be hidden initially) -->
+                    <!-- Top-level comment box -->
                     <div id="commentBox" class="card card-body mb-4" style="display:none;">
-                        <form action="#" method="POST">
+                        <form action="/thread/<%= thread.thread_id %>/comment" method="POST">
+                            <!-- empty => treated as NULL on the server -->
+                            <input type="hidden" name="parent_comment_id" value="">
                             <div class="mb-3">
                                 <label for="commentBody" class="form-label">Add a comment</label>
                                 <textarea id="commentBody" name="body" class="form-control" rows="4"
-                                    placeholder="What are your thoughts?"></textarea>
+                                    placeholder="What are your thoughts?" required></textarea>
                             </div>
                             <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-primary">Post</button>
+                                <button type="submit" class="btn btn-primary">Post</button>
                                 <button type="button" id="cancelComment" class="btn btn-light">Cancel</button>
                             </div>
                         </form>
                     </div>
 
                     <hr>
+                    <h4 class="mt-4 mb-3">Comments</h4>
+                    <% if (!comments || comments.length===0) { %>
+                        <p class="text-muted">No comments yet. Be the first to say something!</p>
+                        <% } else { %>
+                            <ul class="list-group comment-list">
+                                <%- include('partials/comment-item', { nodes: comments, threadId: thread.thread_id,
+                                    level: 0 }) %>
+                            </ul>
+                            <% } %>
                 </div>
             </div>
         </div>
@@ -62,11 +73,18 @@
             if (btn) btn.addEventListener('click', () => box.style.display = 'block');
             if (cancel) cancel.addEventListener('click', () => box.style.display = 'none');
 
+            // Toggle per-comment reply form that uses Bootstrap's d-none
             document.addEventListener('click', (e) => {
-                if (e.target?.dataset?.action === 'reply') {
-                    const id = e.target.dataset.id;
-                    // Placeholder: no-op for now
-                    alert('Reply to comment ' + id + ' (not implemented yet)');
+                const t = e.target.closest('[data-action="toggle-reply"]');
+                if (!t) return;
+
+                const id = t.dataset.id;
+                const form = document.getElementById('reply-form-' + id);
+                if (!form) return;
+
+                form.classList.toggle('d-none');               // <-- toggle the class
+                if (!form.classList.contains('d-none')) {
+                    form.querySelector('textarea')?.focus();
                 }
             });
         })();
