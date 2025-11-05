@@ -202,20 +202,24 @@ app.post('/submitThread', requireAuth(), async (req, res) => {
     }
 });
 
+// app.js  (GET /thread)
 app.get('/thread', requireAuth(), async (req, res) => {
     try {
         const threadId = Number(req.query.threadId || 0);
         if (!threadId) return res.status(400).render('errorMessage', { error: 'Missing threadId' });
 
-        const rows = await db_user.getUserId({ email: req.session.email });
-        const userId = rows?.[0]?.user_id || null;
+        const rowsUid = await db_user.getUserId({ email: req.session.email });
+        const userId = rowsUid?.[0]?.user_id || null;
 
+        // always increment on open
+        await db_thread.incrementViews({ threadId });
+
+        // fetch fresh row AFTER increment so UI shows new count
         const thread = await db_thread.getThreadWithOwner({ threadId, userId });
         if (!thread) return res.status(404).render('404', { title: 'Not Found' });
 
         const flat = await db_thread.listCommentsForThread({ threadId, userId });
-
-        const comments = buildCommentTreeFromFlat(flat); // keep likes_count and liked_by_me
+        const comments = buildCommentTreeFromFlat(flat);
 
         return res.render('thread', { title: thread.title, thread, comments, me: userId });
     } catch (err) {

@@ -1,11 +1,15 @@
 const db = require('../databaseConnection');
 
 async function addComment({ threadId, authorId, body, parentCommentId }) {
-    // parentCommentId can be null for top-level comments
     await db.query(
         `INSERT INTO comments (thread_id, author_id, parent_comment_id, body)
      VALUES (?, ?, ?, ?)`,
         [threadId, authorId, parentCommentId ?? null, body]
+    );
+
+    await db.query(
+        `UPDATE threads SET comments_count = comments_count + 1 WHERE thread_id = ?`,
+        [threadId]
     );
 }
 

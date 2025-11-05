@@ -106,7 +106,28 @@ async function listCommentsForThread({ threadId, userId = null }) {
   return rows || [];
 }
 
+// + add
+async function incrementViews({ threadId }) {
+  await db.query(`UPDATE threads SET views_count = views_count + 1 WHERE thread_id = ?`, [threadId]);
+}
 
+// modify: include views_count
+async function listRecentThreads(limit = 3) {
+  const n = Math.max(1, Math.min(20, Number(limit) || 3));
+  const sql = `
+    SELECT t.thread_id, t.title, t.body,
+           t.created_at,
+           t.views_count,           -- <-- add
+           t.comments_count, t.likes_count,
+           u.display_name AS owner_name
+    FROM threads t
+    JOIN users u ON u.user_id = t.owner_id
+    ORDER BY t.created_at DESC
+    LIMIT ${n}
+  `;
+  const [rows] = await db.query(sql);
+  return rows || [];
+}
 
 module.exports = {
   createThread,
@@ -117,6 +138,8 @@ module.exports = {
   listCommentsForThread,
   likeThread,
   unlikeThread,
-  isThreadLikedByUser
+  isThreadLikedByUser,
+  incrementViews,
 };
+
 

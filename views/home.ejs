@@ -16,27 +16,34 @@
           <div class="col-12 col-lg-4">
             <div class="card shadow-sm h-100">
               <div class="card-body d-flex flex-column">
-                <h3 class="h5 card-title">
-                  <%= t.title %>
+                <h3 class="h5 card-title mb-1">
+                  <a href="/thread?threadId=<%= t.thread_id %>" class="text-decoration-none">
+                    <%= t.title %>
+                  </a>
                 </h3>
+
                 <p class="text-muted mb-2">
                   by <strong>
                     <%= t.owner_name %>
-                  </strong> ·
-                  <%= new Date(t.created_at).toLocaleString() %>
+                  </strong> · <%= new Date(t.created_at).toLocaleString() %>
                 </p>
+
                 <p class="card-text flex-grow-1 thread-snippet">
-                  <% const raw=(t.body || '' ); const normalized=raw .replace(/\r\n/g, '\n' ) // normalize newlines
-                    .replace(/^[\t ]+/gm, '' ) // remove leading spaces on each line .trim(); const
-                    short=normalized.length> 200 ? normalized.slice(0, 200) + '…' : normalized;
+                  <% const raw=(t.body || '' ); const normalized=raw .replace(/\r\n/g, '\n' ) .replace(/^[\t ]+/gm, '' )
+                    .trim(); const short=normalized.length> 200 ? normalized.slice(0, 200) + '…' : normalized;
                     %>
                     <%= short %>
                 </p>
 
-                <div class="d-flex justify-content-between align-items-center">
-                  <!-- <small class="text-muted">💬 <%= t.comments_count || 0 %> · ⬆️ <%= t.likes_count || 0 %></small> -->
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                  <div class="d-flex gap-2">
+                    <span class="badge bg-light text-dark">👁️ <%= t.views_count || 0 %></span>
+                    <span class="badge bg-light text-dark">💬 <%= t.comments_count || 0 %></span>
+                    <span class="badge bg-light text-dark">♥ <%= t.likes_count || 0 %></span>
+                  </div>
                   <a href="/thread?threadId=<%= t.thread_id %>" class="btn btn-outline-primary btn-sm">Open</a>
                 </div>
+
               </div>
             </div>
           </div>
