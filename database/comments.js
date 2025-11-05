@@ -53,8 +53,52 @@ async function getCommentsTree(threadId) {
     return roots;
 }
 
+async function likeComment({ commentId, userId }) {
+    const [res] = await db.query(
+        `INSERT IGNORE INTO comment_likes(comment_id, user_id) VALUES(?, ?)`,
+        [commentId, userId]
+    );
+    if (res.affectedRows === 1) {
+        await db.query(`UPDATE comments SET likes_count = likes_count + 1 WHERE comment_id = ?`, [commentId]);
+        return { changed: true };
+    }
+    return { changed: false };
+}
+
+async function unlikeComment({ commentId, userId }) {
+    const [res] = await db.query(
+        `DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?`,
+        [commentId, userId]
+    );
+    if (res.affectedRows === 1) {
+        await db.query(`UPDATE comments SET likes_count = GREATEST(likes_count - 1, 0) WHERE comment_id = ?`, [commentId]);
+        return { changed: true };
+    }
+    return { changed: false };
+}
+
+async function isCommentLikedByUser({ commentId, userId }) {
+    const [rows] = await db.query(
+        `SELECT 1 FROM comment_likes WHERE comment_id = ? AND user_id = ? LIMIT 1`,
+        [commentId, userId]
+    );
+    return rows.length === 1;
+}
+
+async function getLikesCount({ commentId }) {
+    const [rows] = await db.query(
+        `SELECT likes_count FROM comments WHERE comment_id = ?`,
+        [commentId]
+    );
+    return rows?.[0]?.likes_count ?? 0;
+}
+
 module.exports = {
     addComment,
     parentExistsInThread,
-    getCommentsTree
+    getCommentsTree,
+    likeComment,
+    unlikeComment,
+    isCommentLikedByUser,
+    getLikesCount,
 };

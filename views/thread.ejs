@@ -21,7 +21,20 @@
                         <span>
                             <%= new Date(thread.created_at).toLocaleString() %>
                         </span>
+                        <button type="button"
+                            class="btn btn-sm <%= thread.liked_by_me ? 'btn-primary' : 'btn-outline-primary' %>"
+                            id="thread-like-btn" data-liked="<%= thread.liked_by_me ? '1' : '0' %>"
+                            data-id="<%= thread.thread_id %>">
+                            ♥ <span class="thread-like-text">
+                                <%= thread.liked_by_me ? 'Unlike' : 'Like' %>
+                            </span>
+                            (<span id="thread-like-count">
+                                <%= thread.likes_count %>
+                            </span>)
+                        </button>
+
                     </div>
+
 
                     <div class="mb-4">
                         <p class="thread-body">
@@ -87,6 +100,52 @@
                     form.querySelector('textarea')?.focus();
                 }
             });
+
+            // THREAD LIKE
+            const tBtn = document.getElementById('thread-like-btn');
+            if (tBtn) {
+                tBtn.addEventListener('click', async () => {
+                    const id = tBtn.dataset.id;
+                    const liked = tBtn.dataset.liked === '1';
+                    const action = liked ? 'unlike' : 'like';
+                    const res = await fetch(`/thread/${id}/like`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action })
+                    });
+                    const data = await res.json();
+                    if (!data.ok) return;
+                    document.getElementById('thread-like-count').textContent = data.likesCount;
+                    tBtn.dataset.liked = liked ? '0' : '1';
+                    tBtn.classList.toggle('btn-outline-primary');
+                    tBtn.classList.toggle('btn-primary');
+                    tBtn.querySelector('.thread-like-text').textContent = liked ? 'Like' : 'Unlike';
+                });
+            }
+
+            // COMMENT LIKE
+            document.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.comment-like-btn');
+                if (!btn) return;
+                const id = btn.dataset.id;
+                const liked = btn.dataset.liked === '1';
+                const action = liked ? 'unlike' : 'like';
+
+                const res = await fetch(`/comment/${id}/like`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action })
+                });
+                const data = await res.json();
+                if (!data.ok) return;
+
+                document.getElementById(`comment-like-${id}`).textContent = data.likesCount;
+                btn.dataset.liked = liked ? '0' : '1';
+                btn.classList.toggle('btn-outline-primary');
+                btn.classList.toggle('btn-primary');
+                btn.querySelector('.comment-like-text').textContent = liked ? 'Like' : 'Unlike';
+            });
+
         })();
     </script>
 

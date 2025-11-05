@@ -20,7 +20,18 @@
             <%= node.body %>
         </p>
 
-        <!-- Inline reply form (hidden by default via Bootstrap's d-none) -->
+        <div class="d-flex align-items-center gap-3 mt-1">
+            <button class="btn btn-sm <%= node.liked_by_me ? 'btn-primary' : 'btn-outline-primary' %> comment-like-btn"
+                data-id="<%= id %>" data-liked="<%= node.liked_by_me ? '1' : '0' %>">
+                ♥ <span class="comment-like-text">
+                    <%= node.liked_by_me ? 'Unlike' : 'Like' %>
+                </span>
+            </button>
+            <small class="text-muted">(<span id="comment-like-<%= id %>">
+                    <%= node.likes_count || 0 %>
+                </span>)</small>
+        </div>
+
         <form id="reply-form-<%= id %>" action="/thread/<%= threadId %>/comment" method="POST" class="mt-2 d-none">
             <input type="hidden" name="parent_comment_id" value="<%= id %>">
             <div class="mb-2">

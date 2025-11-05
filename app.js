@@ -26,6 +26,7 @@ const node_session_secret = process.env.NODE_SESSION_SECRET;
 
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 const mongoStore = MongoStore.create({
     mongoUrl: `mongodb+srv://gubzywubzy:${mongodb_password}@gurvircluster.vjdfpla.mongodb.net/?retryWrites=true&w=majority&appName=GurvirCluster`,
@@ -204,29 +205,25 @@ app.post('/submitThread', requireAuth(), async (req, res) => {
 app.get('/thread', requireAuth(), async (req, res) => {
     try {
         const threadId = Number(req.query.threadId || 0);
-        if (!threadId) {
-            return res.status(400).render('errorMessage', { error: 'Missing threadId' });
-        }
+        if (!threadId) return res.status(400).render('errorMessage', { error: 'Missing threadId' });
 
-        const thread = await db_thread.getThreadWithOwner({ threadId });
-        if (!thread) {
-            return res.status(404).render('404', { title: 'Not Found' });
-        }
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id || null;
 
-        // keep your existing query:
-        const flat = await db_thread.listCommentsForThread({ threadId });
-        console.log('flat comments:', flat.length);
-        // build a nested structure for the view:
-        const comments = buildCommentTreeFromFlat(flat);
+        const thread = await db_thread.getThreadWithOwner({ threadId, userId });
+        if (!thread) return res.status(404).render('404', { title: 'Not Found' });
 
-        console.log('roots:', comments.length, comments.map(c => c.comment_id));
+        const flat = await db_thread.listCommentsForThread({ threadId, userId });
 
-        return res.render('thread', { title: thread.title, thread, comments });
+        const comments = buildCommentTreeFromFlat(flat); // keep likes_count and liked_by_me
+
+        return res.render('thread', { title: thread.title, thread, comments, me: userId });
     } catch (err) {
         console.error('GET /thread error:', err);
         return res.status(500).render('errorMessage', { error: 'Could not load thread' });
     }
 });
+
 
 
 app.post('/thread/:threadId/comment', requireAuth(), async (req, res) => {
@@ -280,6 +277,64 @@ app.post('/logout', (req, res, next) => {
     });
 });
 
+app.post('/thread/:threadId/like', requireAuth(), async (req, res) => {
+    try {
+        const threadId = Number(req.params.threadId);
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id;
+        if (!threadId || !userId) return res.status(400).json({ ok: false });
+
+        const action = req.body.action; // 'like' | 'unlike'
+        let result;
+        if (action === 'like') result = await db_thread.likeThread({ threadId, userId });
+        else if (action === 'unlike') result = await db_thread.unlikeThread({ threadId, userId });
+        else return res.status(400).json({ ok: false, error: 'bad action' });
+
+        // return fresh count
+        const fresh = await db_thread.getThreadWithOwner({ threadId, userId });
+        res.json({ ok: true, likedByMe: action === 'like', likesCount: fresh.likes_count, changed: result.changed });
+    } catch (e) {
+        console.error('POST /thread/:threadId/like', e);
+        res.status(500).json({ ok: false });
+    }
+});
+
+app.post('/comment/:commentId/like', requireAuth(), async (req, res) => {
+    try {
+        const commentId = Number(req.params.commentId);
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id;
+
+        if (!commentId || !userId) {
+            return res.status(400).json({ ok: false });
+        }
+
+        const action = req.body?.action; // 'like' | 'unlike'
+        if (!['like', 'unlike'].includes(action)) {
+            return res.status(400).json({ ok: false, error: 'bad action' });
+        }
+
+        let result;
+        if (action === 'like') {
+            result = await db_comment.likeComment({ commentId, userId });
+        } else {
+            result = await db_comment.unlikeComment({ commentId, userId });
+        }
+
+        const likesCount = await db_comment.getLikesCount({ commentId });
+
+        return res.json({
+            ok: true,
+            likesCount,
+            changed: result.changed
+        });
+    } catch (e) {
+        console.error('POST /comment/:commentId/like', e);
+        return res.status(500).json({ ok: false });
+    }
+});
+
+
 // 404
 app.use((req, res) => res.status(404).render('404', { title: 'Not Found' }));
 
@@ -290,17 +345,17 @@ app.listen(port, () => {
 
 // helper placed near the route (or in a util file)
 function buildCommentTreeFromFlat(rows) {
-    // rows expected to have: comment_id, parent_comment_id, body, created_at, author_name, etc.
     const byId = new Map();
     rows.forEach(r => {
         byId.set(r.comment_id, {
-            // keep your existing field names so the EJS can use them directly
             comment_id: r.comment_id,
             parent_comment_id: r.parent_comment_id,
             body: r.body,
             created_at: r.created_at,
             author_name: r.author_name,
-            // any other fields you already select…
+            profile_image: r.profile_image,
+            likes_count: r.likes_count || 0,
+            liked_by_me: !!r.liked_by_me,
             children: []
         });
     });
@@ -313,6 +368,5 @@ function buildCommentTreeFromFlat(rows) {
             roots.push(node);
         }
     });
-
     return roots;
 }
