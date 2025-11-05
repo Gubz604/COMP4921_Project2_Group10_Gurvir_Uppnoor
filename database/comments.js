@@ -1,5 +1,37 @@
 const db = require('../databaseConnection');
 
+async function softDeleteByThreadOwner({ commentId, ownerUserId }) {
+    const [res] = await db.query(
+        `UPDATE comments c
+       JOIN threads t ON t.thread_id = c.thread_id
+       SET c.is_deleted = 1,
+           c.deleted_at = CURRENT_TIMESTAMP,
+           c.deleted_by = ?
+     WHERE c.comment_id = ?
+       AND t.owner_id = ?
+       AND c.is_deleted = 0`,
+        [ownerUserId, commentId, ownerUserId]
+    );
+    return res.affectedRows === 1;
+}
+
+async function getCommentById({ commentId }) {
+    const [rows] = await db.query(
+        `SELECT comment_id, thread_id, author_id, body, created_at, updated_at
+     FROM comments WHERE comment_id = ? LIMIT 1`, [commentId]);
+    return rows?.[0] || null;
+}
+
+async function updateCommentBody({ commentId, authorId, newBody }) {
+    const [res] = await db.query(
+        `UPDATE comments
+       SET body = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE comment_id = ? AND author_id = ?`,
+        [newBody, commentId, authorId]
+    );
+    return res.affectedRows === 1;
+}
+
 async function addComment({ threadId, authorId, body, parentCommentId }) {
     await db.query(
         `INSERT INTO comments (thread_id, author_id, parent_comment_id, body)
@@ -105,4 +137,7 @@ module.exports = {
     unlikeComment,
     isCommentLikedByUser,
     getLikesCount,
+    getCommentById,
+    updateCommentBody,
+    softDeleteByThreadOwner,
 };

@@ -338,6 +338,52 @@ app.post('/comment/:commentId/like', requireAuth(), async (req, res) => {
     }
 });
 
+// Show inline edit not needed server-side; we do JSON API
+app.post('/comment/:commentId/edit', requireAuth(), async (req, res) => {
+    try {
+        const commentId = Number(req.params.commentId);
+        const newBody = (req.body?.body || '').trim();
+        if (!commentId || !newBody) return res.status(400).json({ ok: false, error: 'bad input' });
+
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id;
+        if (!userId) return res.status(401).json({ ok: false });
+
+        // ensure comment exists and belongs to user
+        const c = await db_comment.getCommentById({ commentId });
+        if (!c) return res.status(404).json({ ok: false, error: 'not found' });
+        if (c.author_id !== userId) return res.status(403).json({ ok: false, error: 'forbidden' });
+
+        const ok = await db_comment.updateCommentBody({ commentId, authorId: userId, newBody });
+        if (!ok) return res.status(500).json({ ok: false });
+
+        // return updated fields
+        return res.json({ ok: true, body: newBody, updatedAt: new Date().toISOString() });
+    } catch (e) {
+        console.error('POST /comment/:commentId/edit', e);
+        return res.status(500).json({ ok: false });
+    }
+});
+
+app.post('/comment/:commentId/delete', requireAuth(), async (req, res) => {
+    try {
+        const commentId = Number(req.params.commentId);
+        if (!commentId) return res.status(400).json({ ok: false, error: 'bad id' });
+
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id;
+        if (!userId) return res.status(401).json({ ok: false });
+
+        const ok = await db_comment.softDeleteByThreadOwner({ commentId, ownerUserId: userId });
+        if (!ok) return res.status(403).json({ ok: false, error: 'forbidden' });
+
+        return res.json({ ok: true, commentId, masked: { author_name: 'deleted', body: '[deleted]' } });
+    } catch (e) {
+        console.error('POST /comment/:commentId/delete', e);
+        return res.status(500).json({ ok: false });
+    }
+});
+
 
 // 404
 app.use((req, res) => res.status(404).render('404', { title: 'Not Found' }));
@@ -354,23 +400,25 @@ function buildCommentTreeFromFlat(rows) {
         byId.set(r.comment_id, {
             comment_id: r.comment_id,
             parent_comment_id: r.parent_comment_id,
-            body: r.body,
-            created_at: r.created_at,
+            author_id: r.author_id,
             author_name: r.author_name,
             profile_image: r.profile_image,
+            body: r.body_masked,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
             likes_count: r.likes_count || 0,
             liked_by_me: !!r.liked_by_me,
+            is_deleted: !!r.is_deleted,
+            deleted_at: r.deleted_at,
             children: []
         });
     });
-
     const roots = [];
     byId.forEach(node => {
         if (node.parent_comment_id && byId.has(node.parent_comment_id)) {
             byId.get(node.parent_comment_id).children.push(node);
-        } else {
-            roots.push(node);
-        }
+        } else roots.push(node);
     });
     return roots;
 }
+

@@ -70,8 +70,9 @@
                         <% } else { %>
                             <ul class="list-group comment-list">
                                 <%- include('partials/comment-item', { nodes: comments, threadId: thread.thread_id,
-                                    level: 0 }) %>
+                                    level: 0, me, threadOwnerId: thread.owner_id }) %>
                             </ul>
+
                             <% } %>
                 </div>
             </div>
@@ -144,6 +145,87 @@
                 btn.classList.toggle('btn-outline-primary');
                 btn.classList.toggle('btn-primary');
                 btn.querySelector('.comment-like-text').textContent = liked ? 'Like' : 'Unlike';
+            });
+
+            // Toggle edit form
+            document.addEventListener('click', (e) => {
+                const editBtn = e.target.closest('.comment-edit-btn');
+                if (!editBtn) return;
+                const id = editBtn.dataset.id;
+                const form = document.getElementById('edit-form-' + id);
+                if (form) form.classList.toggle('d-none');
+            });
+
+            // Cancel edit
+            document.addEventListener('click', (e) => {
+                const cancelBtn = e.target.closest('.comment-edit-cancel');
+                if (!cancelBtn) return;
+                const id = cancelBtn.dataset.id;
+                const form = document.getElementById('edit-form-' + id);
+                if (form) form.classList.add('d-none');
+            });
+
+            // Submit edit
+            document.addEventListener('submit', async (e) => {
+                const form = e.target.closest('.comment-edit-form');
+                if (!form) return;
+                e.preventDefault();
+                const id = form.dataset.id;
+                const body = form.querySelector('textarea').value.trim();
+                if (!body) return;
+
+                const res = await fetch(`/comment/${id}/edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ body })
+                });
+                const data = await res.json();
+                if (!data.ok) return;
+
+                // Update the comment text inline
+                const li = document.querySelector(`li[data-comment-id="${id}"]`);
+                if (li) {
+                    const p = li.querySelector('p.mt-2.mb-2');
+                    if (p) p.textContent = data.body;
+                    const timeSpan = li.querySelector('span.text-muted');
+                    if (timeSpan && !timeSpan.textContent.includes('(edited)')) {
+                        timeSpan.innerHTML = timeSpan.innerHTML + ' <em>(edited)</em>';
+                    }
+                }
+                form.classList.add('d-none');
+            });
+
+            // DELETE comment (soft)
+            document.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.comment-delete-btn');
+                if (!btn) return;
+                const id = btn.dataset.id;
+
+                const res = await fetch(`/comment/${id}/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (!data.ok) return;
+
+                const li = document.querySelector(`li[data-comment-id="${id}"]`);
+                if (!li) return;
+
+                // mask author + body
+                const nameStrong = li.querySelector('strong');
+                if (nameStrong) nameStrong.textContent = 'deleted';
+                const p = li.querySelector('p.mt-2.mb-2');
+                if (p) p.textContent = '[deleted]';
+
+                // remove action buttons and show (deleted)
+                li.querySelectorAll('.comment-like-btn, [data-action="toggle-reply"], .comment-edit-btn, .comment-delete-btn')
+                    .forEach(el => el.closest('button') ? el.closest('button').remove() : el.remove());
+
+                const badge = document.createElement('span');
+                badge.className = 'text-muted fst-italic ms-2';
+                badge.textContent = '(deleted)';
+                const header = li.querySelector('.d-flex.justify-content-between.align-items-start > div');
+                if (header) header.appendChild(badge);
             });
 
         })();

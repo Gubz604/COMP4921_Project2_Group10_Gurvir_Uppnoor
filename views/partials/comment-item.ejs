@@ -4,46 +4,81 @@
     const indentClass = level ? 'comment--indented' : '';
     const borderClass = level ? 'comment--border' : '';
     %>
-    <li class="list-group-item comment <%= indentClass %> <%= borderClass %>" data-comment-id="<%= id %>">
-        <div class="d-flex justify-content-between align-items-start">
-            <div>
-                <strong>
-                    <%= authorName %>
-                </strong>
-                <span class="text-muted"> · <%= new Date(createdAt).toLocaleString() %></span>
+    <% const isOwner=(typeof threadOwnerId !=='undefined' ) ? (threadOwnerId===me) : false; %>
+        <li class="list-group-item comment <%= indentClass %> <%= borderClass %>" data-comment-id="<%= id %>">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <strong>
+                        <%= authorName %>
+                    </strong>
+                    <span class="text-muted">
+                        · <%= new Date(createdAt).toLocaleString() %>
+                            <% if (node.updated_at) { %> <em>(edited)</em>
+                                <% } %>
+                    </span>
+
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" data-action="toggle-reply"
+                    data-id="<%= id %>">Reply</button>
             </div>
-            <button class="btn btn-sm btn-outline-secondary" data-action="toggle-reply"
-                data-id="<%= id %>">Reply</button>
-        </div>
 
-        <p class="mt-2 mb-2">
-            <%= node.body %>
-        </p>
+            <p class="mt-2 mb-2">
+                <%= node.body %>
+            </p>
 
-        <div class="d-flex align-items-center gap-3 mt-1">
-            <button class="btn btn-sm <%= node.liked_by_me ? 'btn-primary' : 'btn-outline-primary' %> comment-like-btn"
-                data-id="<%= id %>" data-liked="<%= node.liked_by_me ? '1' : '0' %>">
-                ♥ <span class="comment-like-text">
-                    <%= node.liked_by_me ? 'Unlike' : 'Like' %>
-                </span>
-            </button>
-            <small class="text-muted">(<span id="comment-like-<%= id %>">
-                    <%= node.likes_count || 0 %>
-                </span>)</small>
-        </div>
+            <div class="d-flex align-items-center gap-3 mt-1">
+                <% if (!node.is_deleted) { %>
+                    <button
+                        class="btn btn-sm <%= node.liked_by_me ? 'btn-primary' : 'btn-outline-primary' %> comment-like-btn"
+                        data-id="<%= id %>" data-liked="<%= node.liked_by_me ? '1' : '0' %>">
+                        ♥ <span class="comment-like-text">
+                            <%= node.liked_by_me ? 'Unlike' : 'Like' %>
+                        </span>
+                    </button>
+                    <small class="text-muted">(<span id="comment-like-<%= id %>">
+                            <%= node.likes_count || 0 %>
+                        </span>)</small>
 
-        <form id="reply-form-<%= id %>" action="/thread/<%= threadId %>/comment" method="POST" class="mt-2 d-none">
-            <input type="hidden" name="parent_comment_id" value="<%= id %>">
-            <div class="mb-2">
-                <textarea name="body" class="form-control" rows="2" placeholder="Write a reply..." required></textarea>
+                    <% if (me && me===node.author_id) { %>
+                        <button type="button" class="btn btn-sm btn-link p-0 comment-edit-btn"
+                            data-id="<%= id %>">Edit</button>
+                        <% } %>
+                            <% if (isOwner) { %>
+                                <button type="button" class="btn btn-sm btn-link text-danger p-0 comment-delete-btn"
+                                    data-id="<%= id %>">Delete</button>
+                                <% } %>
+                                    <% } else { %>
+                                        <span class="text-muted fst-italic">(deleted)</span>
+                                        <% } %>
             </div>
-            <button type="submit" class="btn btn-sm btn-primary">Post reply</button>
-        </form>
 
-        <% if (hasChildren) { %>
-            <ul class="list-group mt-2">
-                <%- include('comment-item', { nodes: node.children, threadId, level: level + 1 }) %>
-            </ul>
-            <% } %>
-    </li>
-    <% }); %>
+            <!-- Inline edit form, hidden by default -->
+            <form id="edit-form-<%= id %>" class="mt-2 d-none comment-edit-form" data-id="<%= id %>">
+                <div class="mb-2">
+                    <textarea name="body" class="form-control" rows="3"><%= node.body %></textarea>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                    <button type="button" class="btn btn-sm btn-light comment-edit-cancel"
+                        data-id="<%= id %>">Cancel</button>
+                </div>
+            </form>
+
+
+            <form id="reply-form-<%= id %>" action="/thread/<%= threadId %>/comment" method="POST" class="mt-2 d-none">
+                <input type="hidden" name="parent_comment_id" value="<%= id %>">
+                <div class="mb-2">
+                    <textarea name="body" class="form-control" rows="2" placeholder="Write a reply..."
+                        required></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Post reply</button>
+            </form>
+
+            <% if (hasChildren) { %>
+                <ul class="list-group mt-2">
+                    <%- include('comment-item', { nodes: node.children, threadId, level: level + 1, me, threadOwnerId })
+                        %>
+                </ul>
+                <% } %>
+        </li>
+        <% }); %>

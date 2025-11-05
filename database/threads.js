@@ -90,13 +90,19 @@ async function getThreadWithOwner({ threadId, userId = null }) {
 
 async function listCommentsForThread({ threadId, userId = null }) {
   const sql = `
-    SELECT c.comment_id, c.thread_id, c.author_id, c.parent_comment_id, c.body,
-           c.likes_count, c.created_at,
-           u.display_name AS author_name, u.profile_image,
-           EXISTS(
-             SELECT 1 FROM comment_likes cl
-             WHERE cl.comment_id = c.comment_id AND cl.user_id = ?
-           ) AS liked_by_me
+    SELECT
+      c.comment_id, c.thread_id, c.author_id, c.parent_comment_id,
+      c.body,
+      c.likes_count, c.is_deleted, c.deleted_at,
+      c.created_at,
+      -- masked projections for convenience
+      CASE WHEN c.is_deleted=1 THEN '[deleted]' ELSE c.body END AS body_masked,
+      CASE WHEN c.is_deleted=1 THEN 'deleted'    ELSE u.display_name END AS author_name,
+      u.profile_image,
+      EXISTS(
+        SELECT 1 FROM comment_likes cl
+         WHERE cl.comment_id = c.comment_id AND cl.user_id = ?
+      ) AS liked_by_me
     FROM comments c
     JOIN users u ON u.user_id = c.author_id
     WHERE c.thread_id = ?
@@ -105,6 +111,7 @@ async function listCommentsForThread({ threadId, userId = null }) {
   const [rows] = await db.query(sql, [userId, threadId]);
   return rows || [];
 }
+
 
 // + add
 async function incrementViews({ threadId }) {
@@ -129,6 +136,18 @@ async function listRecentThreads(limit = 3) {
   return rows || [];
 }
 
+async function getThreadOwnerByCommentId({ commentId }) {
+  const sql = `
+    SELECT t.owner_id, c.thread_id
+    FROM comments c
+    JOIN threads t ON t.thread_id = c.thread_id
+    WHERE c.comment_id = ?
+    LIMIT 1
+  `;
+  const [rows] = await db.query(sql, [commentId]);
+  return rows?.[0] || null;
+}
+
 module.exports = {
   createThread,
   getThreadId,
@@ -140,6 +159,7 @@ module.exports = {
   unlikeThread,
   isThreadLikedByUser,
   incrementViews,
+  getThreadOwnerByCommentId
 };
 
 
