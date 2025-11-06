@@ -202,6 +202,38 @@ async function fulltextCandidates({ q, limit = 200 }) {
   return rows || [];
 }
 
+async function listAllThreadIds() {
+  const [rows] = await db.query(`SELECT thread_id FROM threads`);
+  return rows.map(r => r.thread_id);
+}
+
+async function listThreadsByOwner({ userId }) {
+  const [rows] = await db.query(
+    `
+    SELECT
+      t.thread_id,
+      t.title,
+      t.comments_count,
+      t.likes_count,
+      t.created_at,
+      t.updated_at,
+      -- last activity = latest of thread update or any comment update/create
+      GREATEST(
+        COALESCE(t.updated_at, t.created_at),
+        COALESCE((
+          SELECT MAX(GREATEST(COALESCE(c.updated_at, c.created_at), c.created_at))
+          FROM comments c
+          WHERE c.thread_id = t.thread_id
+        ), t.created_at)
+      ) AS last_activity
+    FROM threads t
+    WHERE t.owner_id = ?
+    ORDER BY last_activity DESC
+    `,
+    [userId]
+  );
+  return rows || [];
+}
 
 module.exports = {
   createThread,
@@ -218,6 +250,8 @@ module.exports = {
   rebuildSearchDoc,
   fulltextCandidates,
   listPopularThreads,
+  listThreadsByOwner,
+  listAllThreadIds
 };
 
 

@@ -276,7 +276,7 @@ app.post('/thread/:threadId/comment', requireAuth(), async (req, res) => {
     }
 });
 
-app.get('/home', requireAuth(), async (req, res) => {
+app.get('/home', async (req, res) => {
     try {
         const [recentThreads, popularThreads] = await Promise.all([
             db_thread.listRecentThreads(3),
@@ -450,11 +450,16 @@ app.get('/profile', requireAuth(), async (req, res) => {
     const rows = await db_user.getUserId({ email: req.session.email });
     const userId = rows?.[0]?.user_id;
     const me = userId ? await db_user.getUserById({ userId }) : null;
+
+    const myThreads = userId ? await db_thread.listThreadsByOwner({ userId }) : [];
+
     return res.render('profile', {
         title: 'Your Profile',
-        me
+        me,
+        myThreads
     });
 });
+
 
 // Upload avatar
 app.post('/profile/avatar', requireAuth(), upload.single('avatar'), async (req, res) => {
@@ -490,6 +495,58 @@ app.post('/profile/avatar', requireAuth(), upload.single('avatar'), async (req, 
         req.session.flash = { type: 'danger', text: 'Upload failed.' };
         res.redirect('/profile');
     }
+});
+
+// util: in-file Fisher–Yates
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// START a new scroll session every time user hits /scroll
+app.get('/scroll', requireAuth(), async (req, res) => {
+  try {
+    const ids = await db_thread.listAllThreadIds();      // all current threads
+    if (!ids.length) return res.render('errorMessage', { error: 'No threads available.' });
+
+    shuffleInPlace(ids);
+    req.session.scrollQueue = ids;                       // sequence for THIS visit
+    req.session.save(() => res.redirect('/scroll/next')); // start at first item
+  } catch (e) {
+    console.error('GET /scroll error', e);
+    res.status(500).render('errorMessage', { error: 'Could not start scroll.' });
+  }
+});
+
+// SHOW next thread in the current session queue
+app.get('/scroll/next', requireAuth(), async (req, res) => {
+  try {
+    let q = Array.isArray(req.session.scrollQueue) ? req.session.scrollQueue : null;
+    if (!q || q.length === 0) {
+      // no queue or finished -> offer restart
+      return res.render('scroll', { thread: null, remaining: 0 });
+    }
+
+    const threadId = q.shift();                          
+    req.session.scrollQueue = q;                         
+
+    // track a view whenever shown
+    await db_thread.incrementViews({ threadId });
+
+    // get thread with owner for rendering
+    const rowsUid = await db_user.getUserId({ email: req.session.email });
+    const userId = rowsUid?.[0]?.user_id || null;
+    const thread = await db_thread.getThreadWithOwner({ threadId, userId });
+    if (!thread) return res.redirect('/scroll');         // skip if missing
+
+    res.render('scroll', { thread, remaining: q.length });
+  } catch (e) {
+    console.error('GET /scroll/next error', e);
+    res.status(500).render('errorMessage', { error: 'Could not load next thread.' });
+  }
 });
 
 // 404
