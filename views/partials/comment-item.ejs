@@ -7,16 +7,19 @@
     <% const isOwner=(typeof threadOwnerId !=='undefined' ) ? (threadOwnerId===me) : false; %>
         <li class="list-group-item comment <%= indentClass %> <%= borderClass %>" data-comment-id="<%= id %>">
             <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <strong>
-                        <%= authorName %>
-                    </strong>
-                    <span class="text-muted">
-                        · <%= new Date(createdAt).toLocaleString() %>
-                            <% if (node.updated_at) { %> <em>(edited)</em>
-                                <% } %>
-                    </span>
-
+                <div class="d-flex align-items-center gap-2">
+                    <img src="<%= node.profile_image || 'https://via.placeholder.com/24' %>" alt="avatar"
+                        class="rounded" width="24" height="24">
+                    <div>
+                        <strong>
+                            <%= authorName %>
+                        </strong>
+                        <span class="text-muted">
+                            · <%= new Date(createdAt).toLocaleString() %>
+                                <% if (node.updated_at) { %> <em>(edited)</em>
+                                    <% } %>
+                        </span>
+                    </div>
                 </div>
                 <button class="btn btn-sm btn-outline-secondary" data-action="toggle-reply"
                     data-id="<%= id %>">Reply</button>

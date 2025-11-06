@@ -11,6 +11,7 @@ const db_user = require('./database/users');
 const db_thread = require('./database/threads');
 const db_comment = require('./database/comments');
 const { requireAuth } = require('./lib/auth');
+const { upload } = require('./lib/upload')
 
 db_utils.printMySQLVersion();
 
@@ -51,6 +52,7 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
     res.locals.isAuth = !!req.session?.authenticated;
     res.locals.userEmail = req.session?.email || null;
+    res.locals.profileImage = req.session?.profileImage || null;
     next();
 });
 
@@ -121,10 +123,15 @@ app.post('/signup', async (req, res) => {
         });
     }
 
+    // after successful login:
     req.session.authenticated = true;
-    req.session.email = email;
-    req.session.displayName = displayname; // already known
-    req.session.cookie.maxAge = expireTime;
+    req.session.email = user.email;
+    req.session.displayName = user.display_name;
+    const meRows = await db_user.getUserId({ email: user.email });
+    const meId = meRows?.[0]?.user_id;
+    const me = meId ? await db_user.getUserById({ userId: meId }) : null;
+    req.session.profileImage = me?.profile_image || null;
+
     res.redirect('/home');
 });
 
@@ -166,10 +173,15 @@ app.post('/login', async (req, res) => {
         });
     }
 
+    // after successful login:
     req.session.authenticated = true;
     req.session.email = user.email;
-    req.session.displayName = user.display_name; // use from same row
-    req.session.cookie.maxAge = expireTime;
+    req.session.displayName = user.display_name;
+    const meRows = await db_user.getUserId({ email: user.email });
+    const meId = meRows?.[0]?.user_id;
+    const me = meId ? await db_user.getUserById({ userId: meId }) : null;
+    req.session.profileImage = me?.profile_image || null;
+
     res.redirect('/home');
 });
 
@@ -203,7 +215,7 @@ app.post('/submitThread', requireAuth(), async (req, res) => {
 });
 
 // app.js  (GET /thread)
-app.get('/thread', requireAuth(), async (req, res) => {
+app.get('/thread', async (req, res) => {
     try {
         const threadId = Number(req.query.threadId || 0);
         if (!threadId) return res.status(400).render('errorMessage', { error: 'Missing threadId' });
@@ -266,23 +278,21 @@ app.post('/thread/:threadId/comment', requireAuth(), async (req, res) => {
 
 app.get('/home', requireAuth(), async (req, res) => {
     try {
-        const recentThreads = await db_thread.listRecentThreads(3);
+        const [recentThreads, popularThreads] = await Promise.all([
+            db_thread.listRecentThreads(3),
+            db_thread.listPopularThreads(3)
+        ]);
 
         const rawQ = String(req.query.q || '').toLowerCase();
         let searchResults = [];
         let q = '';
-
-        const tokens = Array.from(
-            new Set(rawQ.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean))
-        );
+        const tokens = Array.from(new Set(rawQ.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean)));
 
         if (tokens.length > 0) {
             q = rawQ;
             const qFT = tokens.join(' ');
             const candidates = await db_thread.fulltextCandidates({ q: qFT, limit: 200 });
-
             if (candidates.length > 0) {
-                // Pull docs for those thread_ids
                 const ids = candidates.map(r => r.thread_id);
                 const placeholders = ids.map(() => '?').join(',');
                 const [docs] = await require('./databaseConnection').query(
@@ -290,8 +300,6 @@ app.get('/home', requireAuth(), async (req, res) => {
                     ids
                 );
                 const docMap = new Map(docs.map(r => [r.thread_id, r.doc || '']));
-
-                // whole-word count in padded doc: " word "
                 const countWord = (doc, word) => {
                     if (!doc) return 0;
                     const needle = ` ${word} `;
@@ -299,19 +307,14 @@ app.get('/home', requireAuth(), async (req, res) => {
                     while ((i = doc.indexOf(needle, i)) !== -1) { c++; i += needle.length; }
                     return c;
                 };
-
                 const enriched = candidates.map(r => {
                     const doc = docMap.get(r.thread_id) || '';
                     const freq = tokens.reduce((acc, w) => acc + countWord(doc, w), 0);
                     return { ...r, freq };
                 });
-
                 enriched.sort((a, b) =>
-                    b.freq - a.freq ||
-                    b.ft_score - a.ft_score ||
-                    new Date(b.created_at) - new Date(a.created_at)
+                    b.freq - a.freq || b.ft_score - a.ft_score || new Date(b.created_at) - new Date(a.created_at)
                 );
-
                 searchResults = enriched.slice(0, 50);
             }
         }
@@ -320,6 +323,7 @@ app.get('/home', requireAuth(), async (req, res) => {
             title: 'Home',
             displayName: req.session.displayName,
             recentThreads,
+            popularThreads,
             q,
             searchResults
         });
@@ -328,6 +332,7 @@ app.get('/home', requireAuth(), async (req, res) => {
         res.status(500).render('errorMessage', { error: 'Could not load home' });
     }
 });
+
 
 
 app.post('/logout', (req, res, next) => {
@@ -438,6 +443,52 @@ app.post('/comment/:commentId/delete', requireAuth(), async (req, res) => {
     } catch (e) {
         console.error('POST /comment/:commentId/delete', e);
         return res.status(500).json({ ok: false });
+    }
+});
+
+app.get('/profile', requireAuth(), async (req, res) => {
+    const rows = await db_user.getUserId({ email: req.session.email });
+    const userId = rows?.[0]?.user_id;
+    const me = userId ? await db_user.getUserById({ userId }) : null;
+    return res.render('profile', {
+        title: 'Your Profile',
+        me
+    });
+});
+
+// Upload avatar
+app.post('/profile/avatar', requireAuth(), upload.single('avatar'), async (req, res) => {
+    try {
+        // multer-storage-cloudinary sets:
+        // req.file.path    -> secure URL
+        // req.file.filename-> public_id
+        if (!req.file?.path) {
+            req.session.flash = { type: 'danger', text: 'No file received.' };
+            return res.redirect('/profile');
+        }
+
+        const rows = await db_user.getUserId({ email: req.session.email });
+        const userId = rows?.[0]?.user_id;
+        if (!userId) {
+            req.session.flash = { type: 'danger', text: 'Not signed in.' };
+            return res.redirect('/loginForm');
+        }
+
+        await db_user.setProfileImage({
+            userId,
+            url: req.file.path,
+            publicId: req.file.filename
+        });
+
+        // Also expose in session for header
+        req.session.profileImage = req.file.path;
+
+        req.session.flash = { type: 'success', text: 'Profile image updated.' };
+        res.redirect('/profile');
+    } catch (e) {
+        console.error('POST /profile/avatar error:', e);
+        req.session.flash = { type: 'danger', text: 'Upload failed.' };
+        res.redirect('/profile');
     }
 });
 

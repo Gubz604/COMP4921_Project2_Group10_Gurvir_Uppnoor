@@ -5,6 +5,53 @@
   <a href="/createThread" class="btn btn-primary">Create Thread</a>
 </div>
 
+<h2 class="h5 mb-3">Most Popular</h2>
+
+<% if (!popularThreads || popularThreads.length === 0) { %>
+  <div class="alert alert-secondary">No popular threads yet.</div>
+<% } else { %>
+  <div class="row g-4">
+    <% popularThreads.forEach(t => { %>
+      <div class="col-12 col-lg-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-body d-flex flex-column">
+            <h3 class="h5 card-title mb-1">
+              <a href="/thread?threadId=<%= t.thread_id %>" class="text-decoration-none"><%= t.title %></a>
+            </h3>
+
+            <p class="text-muted mb-2 d-flex align-items-center gap-2">
+              <img src="<%= t.owner_profile_image || 'https://via.placeholder.com/20' %>"
+                   alt="owner avatar" class="rounded" width="20" height="20">
+              <span>by <strong><%= t.owner_name %></strong> · <%= new Date(t.created_at).toLocaleString() %></span>
+            </p>
+
+            <p class="card-text flex-grow-1 thread-snippet">
+              <%
+                const rawP = (t.body || '');
+                const normalizedP = rawP.replace(/\r\n/g, '\n').replace(/^[\t ]+/gm, '').trim();
+                const shortP = normalizedP.length > 200 ? normalizedP.slice(0, 200) + '…' : normalizedP;
+              %>
+              <%= shortP %>
+            </p>
+
+            <div class="d-flex justify-content-between align-items-center mt-2">
+              <div class="d-flex gap-2">
+                <span class="badge bg-light text-dark">👁️ <%= t.views_count || 0 %></span>
+                <span class="badge bg-light text-dark">💬 <%= t.comments_count || 0 %></span>
+                <span class="badge bg-light text-dark">♥ <%= t.likes_count || 0 %></span>
+              </div>
+              <a href="/thread?threadId=<%= t.thread_id %>" class="btn btn-outline-primary btn-sm">Open</a>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+<% } %>
+
+<hr class="my-4">
+
 <h2 class="h5 mb-3">Most Recent Threads</h2>
 
 <% if (!recentThreads || recentThreads.length === 0) { %>
@@ -19,12 +66,14 @@
               <a href="/thread?threadId=<%= t.thread_id %>" class="text-decoration-none"><%= t.title %></a>
             </h3>
 
-            <p class="text-muted mb-2">
-              by <strong><%= t.owner_name %></strong> · <%= new Date(t.created_at).toLocaleString() %>
+            <p class="text-muted mb-2 d-flex align-items-center gap-2">
+              <img src="<%= t.owner_profile_image || 'https://via.placeholder.com/20' %>"
+                   alt="owner avatar" class="rounded" width="20" height="20">
+              <span>by <strong><%= t.owner_name %></strong> · <%= new Date(t.created_at).toLocaleString() %></span>
             </p>
 
             <p class="card-text flex-grow-1 thread-snippet">
-              <% 
+              <%
                 const raw = (t.body || '');
                 const normalized = raw.replace(/\r\n/g, '\n').replace(/^[\t ]+/gm, '').trim();
                 const short = normalized.length > 200 ? normalized.slice(0, 200) + '…' : normalized;
@@ -65,36 +114,36 @@
 
 <% if (searchResults && searchResults.length > 0) { %>
   <div class="row g-4">
-    <% searchResults.forEach(r => { %>
+    <% searchResults.forEach(t => { %>  <!-- reuse same card fields -->
       <div class="col-12 col-lg-4">
         <div class="card shadow-sm h-100">
           <div class="card-body d-flex flex-column">
             <h3 class="h5 card-title mb-1">
-              <a href="/thread?threadId=<%= r.thread_id %>" class="text-decoration-none"><%= r.title %></a>
+              <a href="/thread?threadId=<%= t.thread_id %>" class="text-decoration-none"><%= t.title %></a>
             </h3>
 
-            <p class="text-muted mb-2">
-              <%= new Date(r.created_at).toLocaleString() %>
-              <span class="ms-2 small text-muted">Freq: <%= r.freq %></span>
-              <span class="ms-2 small text-muted">FT: <%= Number(r.ft_score || 0).toFixed(3) %></span>
+            <p class="text-muted mb-2 d-flex align-items-center gap-2">
+              <img src="<%= t.owner_profile_image || 'https://via.placeholder.com/20' %>"
+                   alt="owner avatar" class="rounded" width="20" height="20">
+              <span>by <strong><%= t.owner_name %></strong> · <%= new Date(t.created_at).toLocaleString() %></span>
             </p>
 
             <p class="card-text flex-grow-1 thread-snippet">
-              <% 
-                const rawR = (r.body || '');
-                const normR = rawR.replace(/\r\n/g, '\n').replace(/^[\t ]+/gm, '').trim();
-                const shortR = normR.length > 200 ? normR.slice(0, 200) + '…' : normR;
+              <%
+                const rawS = (t.body || '');
+                const normalizedS = rawS.replace(/\r\n/g, '\n').replace(/^[\t ]+/gm, '').trim();
+                const shortS = normalizedS.length > 200 ? normalizedS.slice(0, 200) + '…' : normalizedS;
               %>
-              <%= shortR %>
+              <%= shortS %>
             </p>
 
             <div class="d-flex justify-content-between align-items-center mt-2">
               <div class="d-flex gap-2">
-                <span class="badge bg-light text-dark">👁️ <%= r.views_count || 0 %></span>
-                <span class="badge bg-light text-dark">💬 <%= r.comments_count || 0 %></span>
-                <span class="badge bg-light text-dark">♥ <%= r.likes_count || 0 %></span>
+                <span class="badge bg-light text-dark">👁️ <%= t.views_count || 0 %></span>
+                <span class="badge bg-light text-dark">💬 <%= t.comments_count || 0 %></span>
+                <span class="badge bg-light text-dark">♥ <%= t.likes_count || 0 %></span>
               </div>
-              <a href="/thread?threadId=<%= r.thread_id %>" class="btn btn-outline-primary btn-sm">Open</a>
+              <a href="/thread?threadId=<%= t.thread_id %>" class="btn btn-outline-primary btn-sm">Open</a>
             </div>
 
           </div>

@@ -48,16 +48,35 @@ async function getUserId(postData) {
     }
 }
 
+async function setProfileImage({ userId, url, publicId }) {
+    const sql = `UPDATE users SET profile_image = :url WHERE user_id = :userId`;
+    const params = { userId, url };
+    await database.query(sql, params);
+    // If you want to store publicId too, add a column; otherwise skip.
+    return true;
+}
+
+async function getUserById({ userId }) {
+    const sql = `
+    SELECT user_id, email, display_name, profile_image
+    FROM users WHERE user_id = :userId LIMIT 1`;
+    const params = { userId };
+    const rows = await database.query(sql, params);
+    return rows[0]?.[0] || null;
+}
+
 async function getDisplayName(postData) {
     const sql = `SELECT display_name FROM users WHERE email = :email;`;
     const params = { email: postData.email };
     try {
         const result = await database.query(sql, params);
-        return result[0]?.[0]?.display_name || null; 
+        return result[0]?.[0]?.display_name || null;
     } catch (err) {
         console.log("Error trying to find display name", err);
         return null;
     }
 }
 
-module.exports = { createUser, getUser, getUserId, getDisplayName };
+
+
+module.exports = { createUser, getUser, getUserId, getDisplayName, getUserById, setProfileImage };

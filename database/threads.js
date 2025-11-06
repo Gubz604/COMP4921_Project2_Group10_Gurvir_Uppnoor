@@ -130,9 +130,10 @@ async function listRecentThreads(limit = 3) {
   const sql = `
     SELECT t.thread_id, t.title, t.body,
            t.created_at,
-           t.views_count,           -- <-- add
+           t.views_count,
            t.comments_count, t.likes_count,
-           u.display_name AS owner_name
+           u.display_name AS owner_name,
+           u.profile_image AS owner_profile_image      -- <---
     FROM threads t
     JOIN users u ON u.user_id = t.owner_id
     ORDER BY t.created_at DESC
@@ -141,6 +142,27 @@ async function listRecentThreads(limit = 3) {
   const [rows] = await db.query(sql);
   return rows || [];
 }
+
+async function listPopularThreads(limit = 3) {
+  const n = Math.max(1, Math.min(20, Number(limit) || 3));
+  const sql = `
+    SELECT t.thread_id, t.title, t.body,
+           t.created_at,
+           t.views_count,
+           t.comments_count, t.likes_count,
+           (t.likes_count + t.comments_count) AS popularity,
+           u.display_name AS owner_name,
+           u.profile_image AS owner_profile_image
+    FROM threads t
+    JOIN users u ON u.user_id = t.owner_id
+    ORDER BY popularity DESC, t.created_at DESC
+    LIMIT ${n}
+  `;
+  const [rows] = await db.query(sql);
+  return rows || [];
+}
+module.exports.listPopularThreads = listPopularThreads;
+
 
 async function getThreadOwnerByCommentId({ commentId }) {
   const sql = `
@@ -165,9 +187,12 @@ async function fulltextCandidates({ q, limit = 200 }) {
       t.views_count,
       t.comments_count,
       t.likes_count,
+      u.display_name AS owner_name,                  -- <---
+      u.profile_image AS owner_profile_image,        -- <---
       MATCH(d.doc) AGAINST (? IN NATURAL LANGUAGE MODE) AS ft_score
     FROM thread_search_docs d
     JOIN threads t ON t.thread_id = d.thread_id
+    JOIN users u   ON u.user_id = t.owner_id
     WHERE MATCH(d.doc) AGAINST (? IN NATURAL LANGUAGE MODE)
     ORDER BY ft_score DESC
     LIMIT ?
@@ -192,6 +217,7 @@ module.exports = {
   getThreadOwnerByCommentId,
   rebuildSearchDoc,
   fulltextCandidates,
+  listPopularThreads,
 };
 
 
