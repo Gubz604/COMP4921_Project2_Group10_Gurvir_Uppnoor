@@ -126,8 +126,8 @@ app.post('/signup', async (req, res) => {
     // after successful login:
     req.session.authenticated = true;
     req.session.email = req.body.email;
-    req.session.displayName = req.body.display_name;
-    const meRows = await db_user.getUserId({ email: user.email });
+    req.session.displayName = req.body.displayName;
+    const meRows = await db_user.getUserId({ email: req.body.email });
     const meId = meRows?.[0]?.user_id;
     const me = meId ? await db_user.getUserById({ userId: meId }) : null;
     req.session.profileImage = me?.profile_image || null;
