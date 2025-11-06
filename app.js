@@ -84,56 +84,89 @@ app.get('/loginForm', (req, res) => {
 });
 
 app.post('/signup', async (req, res) => {
-    const { email, password, displayname } = req.body;
+    try {
+        const { email, password, displayname } = req.body;
 
-    const fields = { email: email || '', displayname: displayname || '' };
-    const fieldErrors = {};
+        const fields = { email: email || '', displayname: displayname || '' };
+        const fieldErrors = {};
 
-    if (!emailOk(email)) fieldErrors.email = 'Enter a valid email.';
-    if (!nonEmpty(displayname) || displayname.trim().length < 2) fieldErrors.displayname = 'Display name is too short.';
-    if (!nonEmpty(password) || password.length < 8) fieldErrors.password = 'Password must be at least 8 characters.';
+        if (!emailOk(email)) fieldErrors.email = 'Enter a valid email.';
+        if (!nonEmpty(displayname) || displayname.trim().length < 2) fieldErrors.displayname = 'Display name is too short.';
+        if (!nonEmpty(password) || password.length < 8) fieldErrors.password = 'Password must be at least 8 characters.';
 
-    if (Object.keys(fieldErrors).length) {
-        return res.status(400).render('signup', {
-            title: 'Sign Up',
-            error: 'Fix the errors and try again.',
-            fields,
-            fieldErrors
+        if (Object.keys(fieldErrors).length) {
+            return res.status(400).render('signup', {
+                title: 'Sign Up',
+                error: 'Fix the errors and try again.',
+                fields,
+                fieldErrors
+            });
+        }
+
+        const existing = await db_user.getUser({ email });
+        if (existing && existing.length > 0) {
+            return res.status(409).render('signup', {
+                title: 'Sign Up',
+                error: 'An account with that email already exists.',
+                fields,
+                fieldErrors: { email: 'Email already in use.' }
+            });
+        }
+
+        const password_hash = bcrypt.hashSync(password, saltRounds);
+
+        // Ensure your createUser expects these exact keys.
+        // DB column is likely display_name and password_hash.
+        const created = await db_user.createUser({
+            email,
+            password_hash,
+            display_name: displayname.trim()
         });
-    }
 
-    const existing = await db_user.getUser({ email });
-    if (existing && existing.length > 0) {
-        return res.status(409).render('signup', {
-            title: 'Sign Up',
-            error: 'An account with that email already exists.',
-            fields,
-            fieldErrors: { email: 'Email already in use.' }
-        });
-    }
+        if (!created) {
+            return res.status(500).render('signup', {
+                title: 'Sign Up',
+                error: 'Could not create the account. Try again.',
+                fields,
+                fieldErrors: {}
+            });
+        }
 
-    const hashedPassword = bcrypt.hashSync(password, saltRounds);
-    const ok = await db_user.createUser({ email, hashedPassword, displayName: displayname });
-    if (!ok) {
+        // Fetch the newly created user so `user` is defined
+        const rows = await db_user.getUser({ email });
+        const user = rows && rows[0] ? rows[0] : null;
+        if (!user) {
+            return res.status(500).render('signup', {
+                title: 'Sign Up',
+                error: 'Account created but could not load user.',
+                fields,
+                fieldErrors: {}
+            });
+        }
+
+        // set session
+        req.session.authenticated = true;
+        req.session.email = user.email;
+        req.session.displayName = user.display_name;
+
+        // optional: hydrate profile image for header
+        const meRows = await db_user.getUserId({ email: user.email });
+        const meId = meRows?.[0]?.user_id;
+        const me = meId ? await db_user.getUserById({ userId: meId }) : null;
+        req.session.profileImage = me?.profile_image || null;
+
+        return res.redirect('/home');
+    } catch (err) {
+        console.error('POST /signup error:', err);
         return res.status(500).render('signup', {
             title: 'Sign Up',
-            error: 'Could not create the account. Try again.',
-            fields,
+            error: 'Internal error during signup.',
+            fields: { email: req.body?.email || '', displayname: req.body?.displayname || '' },
             fieldErrors: {}
         });
     }
-
-    // after successful login:
-    req.session.authenticated = true;
-    req.session.email = user.email;
-    req.session.displayName = user.display_name;
-    const meRows = await db_user.getUserId({ email: user.email });
-    const meId = meRows?.[0]?.user_id;
-    const me = meId ? await db_user.getUserById({ userId: meId }) : null;
-    req.session.profileImage = me?.profile_image || null;
-
-    res.redirect('/home');
 });
+
 
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
@@ -499,54 +532,54 @@ app.post('/profile/avatar', requireAuth(), upload.single('avatar'), async (req, 
 
 // util: in-file Fisher–Yates
 function shuffleInPlace(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
 }
 
 // START a new scroll session every time user hits /scroll
 app.get('/scroll', requireAuth(), async (req, res) => {
-  try {
-    const ids = await db_thread.listAllThreadIds();      // all current threads
-    if (!ids.length) return res.render('errorMessage', { error: 'No threads available.' });
+    try {
+        const ids = await db_thread.listAllThreadIds();      // all current threads
+        if (!ids.length) return res.render('errorMessage', { error: 'No threads available.' });
 
-    shuffleInPlace(ids);
-    req.session.scrollQueue = ids;                       // sequence for THIS visit
-    req.session.save(() => res.redirect('/scroll/next')); // start at first item
-  } catch (e) {
-    console.error('GET /scroll error', e);
-    res.status(500).render('errorMessage', { error: 'Could not start scroll.' });
-  }
+        shuffleInPlace(ids);
+        req.session.scrollQueue = ids;                       // sequence for THIS visit
+        req.session.save(() => res.redirect('/scroll/next')); // start at first item
+    } catch (e) {
+        console.error('GET /scroll error', e);
+        res.status(500).render('errorMessage', { error: 'Could not start scroll.' });
+    }
 });
 
 // SHOW next thread in the current session queue
 app.get('/scroll/next', requireAuth(), async (req, res) => {
-  try {
-    let q = Array.isArray(req.session.scrollQueue) ? req.session.scrollQueue : null;
-    if (!q || q.length === 0) {
-      // no queue or finished -> offer restart
-      return res.render('scroll', { thread: null, remaining: 0 });
+    try {
+        let q = Array.isArray(req.session.scrollQueue) ? req.session.scrollQueue : null;
+        if (!q || q.length === 0) {
+            // no queue or finished -> offer restart
+            return res.render('scroll', { thread: null, remaining: 0 });
+        }
+
+        const threadId = q.shift();
+        req.session.scrollQueue = q;
+
+        // track a view whenever shown
+        await db_thread.incrementViews({ threadId });
+
+        // get thread with owner for rendering
+        const rowsUid = await db_user.getUserId({ email: req.session.email });
+        const userId = rowsUid?.[0]?.user_id || null;
+        const thread = await db_thread.getThreadWithOwner({ threadId, userId });
+        if (!thread) return res.redirect('/scroll');         // skip if missing
+
+        res.render('scroll', { thread, remaining: q.length });
+    } catch (e) {
+        console.error('GET /scroll/next error', e);
+        res.status(500).render('errorMessage', { error: 'Could not load next thread.' });
     }
-
-    const threadId = q.shift();                          
-    req.session.scrollQueue = q;                         
-
-    // track a view whenever shown
-    await db_thread.incrementViews({ threadId });
-
-    // get thread with owner for rendering
-    const rowsUid = await db_user.getUserId({ email: req.session.email });
-    const userId = rowsUid?.[0]?.user_id || null;
-    const thread = await db_thread.getThreadWithOwner({ threadId, userId });
-    if (!thread) return res.redirect('/scroll');         // skip if missing
-
-    res.render('scroll', { thread, remaining: q.length });
-  } catch (e) {
-    console.error('GET /scroll/next error', e);
-    res.status(500).render('errorMessage', { error: 'Could not load next thread.' });
-  }
 });
 
 // 404
