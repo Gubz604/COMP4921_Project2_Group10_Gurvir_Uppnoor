@@ -1,13 +1,33 @@
 const db = require('../databaseConnection');
 
+async function rebuildSearchDoc({ threadId }) {
+  const [[row]] = await db.query(
+    `SELECT t.title, t.body, COALESCE(GROUP_CONCAT(c.body SEPARATOR ' '), '') AS csum
+   FROM threads t
+   LEFT JOIN comments c ON c.thread_id = t.thread_id AND c.is_deleted = 0
+   WHERE t.thread_id = ?
+   GROUP BY t.thread_id`,
+    [threadId]
+  );
+  const raw = [row.title || '', row.body || '', row.csum || ''].join(' ');
+  const cleaned = raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  const padded = ` ${cleaned} `;
+  await db.query(
+    `INSERT INTO thread_search_docs (thread_id, doc)
+   VALUES (?, ?) ON DUPLICATE KEY UPDATE doc = VALUES(doc)`,
+    [threadId, padded]
+  );
+}
+
 // THREADS
 async function createThread({ userId, title, description }) {
-  const sql = `
-    INSERT INTO threads (owner_id, title, body)
-    VALUES (?, ?, ?)
-  `;
-  const [result] = await db.query(sql, [userId, title, description]);
-  return result.insertId; // thread_id
+  const [res] = await db.query(
+    `INSERT INTO threads (owner_id, title, body) VALUES (?, ?, ?)`,
+    [userId, title, description]
+  );
+  const threadId = res.insertId;
+  await rebuildSearchDoc({ threadId });
+  return threadId;
 }
 
 async function getThreadId({ userId, title }) {
@@ -22,21 +42,6 @@ async function getThreadId({ userId, title }) {
   return rows || [];
 }
 
-async function listRecentThreads(limit = 3) {
-  const n = Math.max(1, Math.min(20, Number(limit) || 3));
-  const sql = `
-    SELECT t.thread_id, t.title, t.body, t.created_at,
-           t.comments_count, t.likes_count,
-           u.display_name AS owner_name
-    FROM threads t
-    JOIN users u ON u.user_id = t.owner_id
-    ORDER BY t.created_at DESC
-    LIMIT ${n}
-  `;
-  const [rows] = await db.query(sql);
-  return rows || [];
-}
-
 // COMMENTS
 async function addComment({ threadId, authorId, body, parentCommentId = null }) {
   const sql = `
@@ -45,6 +50,7 @@ async function addComment({ threadId, authorId, body, parentCommentId = null }) 
   `;
   await db.query(sql, [threadId, authorId, parentCommentId, body]);
   await db.query(`UPDATE threads SET comments_count = comments_count + 1 WHERE thread_id = ?`, [threadId]);
+  await rebuildSearchDoc({ threadId });
 }
 
 async function likeThread({ threadId, userId }) {
@@ -148,6 +154,30 @@ async function getThreadOwnerByCommentId({ commentId }) {
   return rows?.[0] || null;
 }
 
+async function fulltextCandidates({ q, limit = 200 }) {
+  const [rows] = await db.query(
+    `
+    SELECT
+      t.thread_id,
+      t.title,
+      t.body,
+      t.created_at,
+      t.views_count,
+      t.comments_count,
+      t.likes_count,
+      MATCH(d.doc) AGAINST (? IN NATURAL LANGUAGE MODE) AS ft_score
+    FROM thread_search_docs d
+    JOIN threads t ON t.thread_id = d.thread_id
+    WHERE MATCH(d.doc) AGAINST (? IN NATURAL LANGUAGE MODE)
+    ORDER BY ft_score DESC
+    LIMIT ?
+    `,
+    [q, q, Math.max(1, Math.min(500, limit))]
+  );
+  return rows || [];
+}
+
+
 module.exports = {
   createThread,
   getThreadId,
@@ -159,7 +189,9 @@ module.exports = {
   unlikeThread,
   isThreadLikedByUser,
   incrementViews,
-  getThreadOwnerByCommentId
+  getThreadOwnerByCommentId,
+  rebuildSearchDoc,
+  fulltextCandidates,
 };
 
 

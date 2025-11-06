@@ -265,13 +265,70 @@ app.post('/thread/:threadId/comment', requireAuth(), async (req, res) => {
 });
 
 app.get('/home', requireAuth(), async (req, res) => {
-    const recentThreads = await db_thread.listRecentThreads(3);
-    res.render('home', {
-        title: 'Home',
-        displayName: req.session.displayName,
-        recentThreads
-    });
+    try {
+        const recentThreads = await db_thread.listRecentThreads(3);
+
+        const rawQ = String(req.query.q || '').toLowerCase();
+        let searchResults = [];
+        let q = '';
+
+        const tokens = Array.from(
+            new Set(rawQ.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean))
+        );
+
+        if (tokens.length > 0) {
+            q = rawQ;
+            const qFT = tokens.join(' ');
+            const candidates = await db_thread.fulltextCandidates({ q: qFT, limit: 200 });
+
+            if (candidates.length > 0) {
+                // Pull docs for those thread_ids
+                const ids = candidates.map(r => r.thread_id);
+                const placeholders = ids.map(() => '?').join(',');
+                const [docs] = await require('./databaseConnection').query(
+                    `SELECT thread_id, doc FROM thread_search_docs WHERE thread_id IN (${placeholders})`,
+                    ids
+                );
+                const docMap = new Map(docs.map(r => [r.thread_id, r.doc || '']));
+
+                // whole-word count in padded doc: " word "
+                const countWord = (doc, word) => {
+                    if (!doc) return 0;
+                    const needle = ` ${word} `;
+                    let i = 0, c = 0;
+                    while ((i = doc.indexOf(needle, i)) !== -1) { c++; i += needle.length; }
+                    return c;
+                };
+
+                const enriched = candidates.map(r => {
+                    const doc = docMap.get(r.thread_id) || '';
+                    const freq = tokens.reduce((acc, w) => acc + countWord(doc, w), 0);
+                    return { ...r, freq };
+                });
+
+                enriched.sort((a, b) =>
+                    b.freq - a.freq ||
+                    b.ft_score - a.ft_score ||
+                    new Date(b.created_at) - new Date(a.created_at)
+                );
+
+                searchResults = enriched.slice(0, 50);
+            }
+        }
+
+        res.render('home', {
+            title: 'Home',
+            displayName: req.session.displayName,
+            recentThreads,
+            q,
+            searchResults
+        });
+    } catch (e) {
+        console.error('GET /home error:', e);
+        res.status(500).render('errorMessage', { error: 'Could not load home' });
+    }
 });
+
 
 app.post('/logout', (req, res, next) => {
     req.session.destroy(err => {
@@ -383,7 +440,6 @@ app.post('/comment/:commentId/delete', requireAuth(), async (req, res) => {
         return res.status(500).json({ ok: false });
     }
 });
-
 
 // 404
 app.use((req, res) => res.status(404).render('404', { title: 'Not Found' }));

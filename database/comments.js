@@ -1,18 +1,20 @@
 const db = require('../databaseConnection');
+const { rebuildSearchDoc } = require('../database/threads');
 
 async function softDeleteByThreadOwner({ commentId, ownerUserId }) {
     const [res] = await db.query(
         `UPDATE comments c
        JOIN threads t ON t.thread_id = c.thread_id
-       SET c.is_deleted = 1,
-           c.deleted_at = CURRENT_TIMESTAMP,
-           c.deleted_by = ?
-     WHERE c.comment_id = ?
-       AND t.owner_id = ?
-       AND c.is_deleted = 0`,
+       SET c.is_deleted = 1, c.deleted_at = CURRENT_TIMESTAMP, c.deleted_by = ?
+     WHERE c.comment_id = ? AND t.owner_id = ? AND c.is_deleted = 0`,
         [ownerUserId, commentId, ownerUserId]
     );
-    return res.affectedRows === 1;
+    if (res.affectedRows === 1) {
+        const [[row]] = await db.query(`SELECT thread_id FROM comments WHERE comment_id = ?`, [commentId]);
+        if (row) await rebuildSearchDoc({ threadId: row.thread_id });   // <--
+        return true;
+    }
+    return false;
 }
 
 async function getCommentById({ commentId }) {
@@ -24,11 +26,14 @@ async function getCommentById({ commentId }) {
 
 async function updateCommentBody({ commentId, authorId, newBody }) {
     const [res] = await db.query(
-        `UPDATE comments
-       SET body = ?, updated_at = CURRENT_TIMESTAMP
+        `UPDATE comments SET body = ?, updated_at = CURRENT_TIMESTAMP
      WHERE comment_id = ? AND author_id = ?`,
         [newBody, commentId, authorId]
     );
+    if (res.affectedRows === 1) {
+        const [[row]] = await db.query(`SELECT thread_id FROM comments WHERE comment_id = ?`, [commentId]);
+        if (row) await rebuildSearchDoc({ threadId: row.thread_id });   // <--
+    }
     return res.affectedRows === 1;
 }
 
@@ -38,11 +43,8 @@ async function addComment({ threadId, authorId, body, parentCommentId }) {
      VALUES (?, ?, ?, ?)`,
         [threadId, authorId, parentCommentId ?? null, body]
     );
-
-    await db.query(
-        `UPDATE threads SET comments_count = comments_count + 1 WHERE thread_id = ?`,
-        [threadId]
-    );
+    await db.query(`UPDATE threads SET comments_count = comments_count + 1 WHERE thread_id = ?`, [threadId]);
+    await rebuildSearchDoc({ threadId });              // <--
 }
 
 async function parentExistsInThread({ threadId, parentCommentId }) {
